@@ -41,9 +41,12 @@ rabbitmq:
     managerPortEnabled: true
 
   # Mở management UI ra ngoài cluster qua Ingress (trỏ tới port 15672).
+  # Host = <subdomain>.<global.baseDomain>, ví dụ rabbitmq-mgm.vodka.bid.
+  # global.baseDomain do umbrella chart scs đặt (không khai báo ở đây để khỏi đè giá trị của scs).
   ingress:
     enabled: false
-    hostname: rabbitmq-mgm.example.com
+    subdomain: rabbitmq-mgm
+    hostname: '{{ .Values.ingress.subdomain }}.{{ required "global.baseDomain is required when ingress is enabled" .Values.global.baseDomain }}'
     path: /
     pathType: ImplementationSpecific
     # Để trống = dùng IngressClass mặc định của cluster (k3s: traefik).

@@ -43,13 +43,17 @@ kubectl port-forward svc/<release>-rabbitmq -n homelab 15672:15672
 
 Rồi vào http://localhost:15672, đăng nhập bằng user `app`.
 
-Hoặc bật Ingress (trỏ tới port 15672):
+Hoặc bật Ingress (trỏ tới port 15672). Host là `<ingress.subdomain>.<global.baseDomain>`, mặc định `rabbitmq-mgm.<global.baseDomain>`:
 
 ```yaml
+global:
+  baseDomain: vodka.bid
 rabbitmq:
   ingress:
     enabled: true
-    hostname: rabbitmq-mgm.example.com
+    # subdomain: rabbitmq-mgm
 ```
+
+Thiếu `global.baseDomain` khi bật Ingress thì `helm template` báo lỗi.
 
 Mật khẩu được sinh ngẫu nhiên khi cài lần đầu. Để tránh bị đổi khi upgrade, hãy tạo Secret trước rồi trỏ tới nó bằng `rabbitmq.auth.existingPasswordSecret` và `rabbitmq.auth.existingErlangSecret`.
