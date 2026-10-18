@@ -1,0 +1,115 @@
+name: Helm release
+
+# Build the Helm chart at the repo root and push it to GitHub Container Registry:
+#   oci://ghcr.io/<owner>/charts/<chart-name>:<version>
+# A version that already exists in the registry is not pushed again; bump `version` in Chart.yaml to release.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: helm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for Chart.yaml
+        id: chart
+        run: |
+          if [ ! -f Chart.yaml ]; then
+            echo "::notice::No Chart.yaml at repo root, nothing to release."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+          echo "name=$(yq '.name' Chart.yaml)" >> "$GITHUB_OUTPUT"
+          echo "version=$(yq '.version' Chart.yaml)" >> "$GITHUB_OUTPUT"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "registry=oci://ghcr.io/${owner}/charts" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Helm
+        if: steps.chart.outputs.exists == 'true'
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Log in to ghcr.io
+        if: steps.chart.outputs.exists == 'true'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Check whether this version is already published
+        if: steps.chart.outputs.exists == 'true'
+        id: published
+        env:
+          REF: ${{ steps.chart.outputs.registry }}/${{ steps.chart.outputs.name }}
+          VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          if helm show chart "$REF" --version "$VERSION" > /dev/null 2>&1; then
+            echo "::notice::$REF:$VERSION already exists, skipping push. Bump version in Chart.yaml to release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build dependencies
+        if: steps.chart.outputs.exists == 'true'
+        run: helm dependency build .
+
+      - name: Lint
+        if: steps.chart.outputs.exists == 'true'
+        run: helm lint .
+
+      - name: Package
+        if: steps.chart.outputs.exists == 'true'
+        run: helm package . --destination dist
+
+      - name: Push to ghcr.io
+        if: steps.chart.outputs.exists == 'true' && steps.published.outputs.skip == 'false'
+        env:
+          REGISTRY: ${{ steps.chart.outputs.registry }}
+        run: helm push dist/*.tgz "$REGISTRY"
+
+      # Cập nhật helm.version trong scs/<chart>/fleet.yaml để Rancher Fleet deploy version mới.
+      # Cần secret SCS_PUSH_TOKEN: fine-grained PAT, repo scs, quyền Contents: Read and write.
+      - name: Bump version in scs
+        if: steps.chart.outputs.exists == 'true' && steps.published.outputs.skip == 'false'
+        env:
+          SCS_PUSH_TOKEN: ${{ secrets.SCS_PUSH_TOKEN }}
+          NAME: ${{ steps.chart.outputs.name }}
+          VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          if [ -z "$SCS_PUSH_TOKEN" ]; then
+            echo "::warning::SCS_PUSH_TOKEN is not set, skipping scs bump."
+            exit 0
+          fi
+          git clone --depth 1 "https://x-access-token:${SCS_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY_OWNER}/scs.git" scs
+          cd scs
+          file="${NAME}/fleet.yaml"
+          if [ ! -f "$file" ]; then
+            echo "::notice::scs/$file does not exist, skipping bump."
+            exit 0
+          fi
+          yq -i '.helm.version = strenv(VERSION)' "$file"
+          if git diff --quiet; then
+            echo "::notice::scs/$file already at $VERSION."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Bump ${NAME} to ${VERSION}" -m "From ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+          # Retry khi component khác push vào scs cùng lúc.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+          done
+          exit 1
