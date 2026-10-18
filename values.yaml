@@ -1,0 +1,54 @@
+# Giá trị truyền xuống chart bitnami/rabbitmq.
+# Xem đầy đủ: https://artifacthub.io/packages/helm/bitnami/rabbitmq?modal=values
+rabbitmq:
+  # docker.io/bitnami/rabbitmq không còn tag nào; image cũ được giữ ở bitnamilegacy
+  # (không còn nhận bản vá bảo mật).
+  image:
+    repository: bitnamilegacy/rabbitmq
+    tag: 4.1.3-debian-12-r1
+  global:
+    security:
+      # Chart Bitnami chặn image ngoài repo bitnami/* nếu không bật cờ này.
+      allowInsecureImages: true
+
+  replicaCount: 1
+
+  auth:
+    username: app
+    # Để trống thì chart tự sinh mật khẩu và Erlang cookie, lưu vào Secret.
+    # Nên trỏ tới Secret có sẵn để không bị đổi khi upgrade:
+    # existingPasswordSecret: rabbitmq-auth
+    # existingErlangSecret: rabbitmq-auth
+
+  persistence:
+    enabled: true
+    size: 2Gi
+    # Để trống = dùng StorageClass mặc định của cluster.
+    storageClass: ""
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  # Management UI + HTTP API (port 15672). rabbitmq_peer_discovery_k8s cần cho clustering.
+  plugins: "rabbitmq_management rabbitmq_peer_discovery_k8s"
+
+  service:
+    type: ClusterIP
+    managerPortEnabled: true
+
+  # Mở management UI ra ngoài cluster qua Ingress (trỏ tới port 15672).
+  ingress:
+    enabled: false
+    hostname: rabbitmq.homelab.local
+    path: /
+    pathType: ImplementationSpecific
+    # Để trống = dùng IngressClass mặc định của cluster (k3s: traefik).
+    ingressClassName: ""
+    tls: false
+
+  metrics:
+    enabled: false
