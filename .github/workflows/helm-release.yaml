@@ -79,7 +79,8 @@ jobs:
           REGISTRY: ${{ steps.chart.outputs.registry }}
         run: helm push dist/*.tgz "$REGISTRY"
 
-      # Cập nhật helm.version trong scs/<chart>/fleet.yaml để Rancher Fleet deploy version mới.
+      # Cập nhật version của dependency <chart> trong scs/Chart.yaml (umbrella chart);
+      # workflow vendor-charts của scs sẽ tải chart mới về charts/ để Fleet deploy.
       # Cần secret SCS_PUSH_TOKEN: fine-grained PAT, repo scs, quyền Contents: Read and write.
       - name: Bump version in scs
         if: steps.chart.outputs.exists == 'true' && steps.published.outputs.skip == 'false'
@@ -94,14 +95,13 @@ jobs:
           fi
           git clone --depth 1 "https://x-access-token:${SCS_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY_OWNER}/scs.git" scs
           cd scs
-          file="${NAME}/fleet.yaml"
-          if [ ! -f "$file" ]; then
-            echo "::notice::scs/$file does not exist, skipping bump."
+          if [ "$(yq '[.dependencies[] | select(.name == strenv(NAME))] | length' Chart.yaml)" = "0" ]; then
+            echo "::notice::$NAME is not a dependency in scs/Chart.yaml, skipping bump."
             exit 0
           fi
-          yq -i '.helm.version = strenv(VERSION)' "$file"
+          yq -i '(.dependencies[] | select(.name == strenv(NAME))).version = strenv(VERSION)' Chart.yaml
           if git diff --quiet; then
-            echo "::notice::scs/$file already at $VERSION."
+            echo "::notice::scs/Chart.yaml already uses $NAME $VERSION."
             exit 0
           fi
           git config user.name "github-actions[bot]"
