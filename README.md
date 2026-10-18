@@ -5,7 +5,7 @@ Helm chart chạy RabbitMQ trên Kubernetes. Chart này không tự viết templ
 Cấu hình mặc định (xem [values.yaml](values.yaml)):
 
 - RabbitMQ 4.1.3, 1 node, ổ 2Gi dùng StorageClass mặc định
-- User `app`, mật khẩu và Erlang cookie tự sinh
+- User `app`, mật khẩu và Erlang cookie tự sinh, lưu trong Secret `<release>-rabbitmq-auth`
 - Bật plugin `rabbitmq_management` (UI + HTTP API ở port 15672), Ingress cho UI tắt sẵn
 - Không bật metrics
 
@@ -27,12 +27,12 @@ Với release tên `<release>`, chart tạo:
 | Resource | Tên |
 | --- | --- |
 | Service | `<release>-rabbitmq` (AMQP 5672, management UI 15672) |
-| Secret | `<release>-rabbitmq` (key `rabbitmq-password` cho user `app`, `rabbitmq-erlang-cookie`) |
+| Secret | `<release>-rabbitmq-auth` (key `rabbitmq-password` cho user `app`, `rabbitmq-erlang-cookie`) |
 
 Lấy mật khẩu:
 
 ```bash
-kubectl get secret <release>-rabbitmq -n homelab -o jsonpath='{.data.rabbitmq-password}' | base64 -d
+kubectl get secret <release>-rabbitmq-auth -n homelab -o jsonpath='{.data.rabbitmq-password}' | base64 -d
 ```
 
 Mở management UI:
@@ -56,4 +56,11 @@ rabbitmq:
 
 Thiếu `global.baseDomain` khi bật Ingress thì `helm template` báo lỗi.
 
-Mật khẩu được sinh ngẫu nhiên khi cài lần đầu. Để tránh bị đổi khi upgrade, hãy tạo Secret trước rồi trỏ tới nó bằng `rabbitmq.auth.existingPasswordSecret` và `rabbitmq.auth.existingErlangSecret`.
+## Credential
+
+Mật khẩu và Erlang cookie nằm trong Secret `<release>-rabbitmq-auth`, do chart này tạo ([templates/auth-secret.yaml](templates/auth-secret.yaml)). Không có credential nào trong git.
+
+- Sinh ngẫu nhiên khi cài lần đầu, giữ nguyên khi upgrade (`lookup` Secret đang có).
+- Có annotation `helm.sh/resource-policy: keep`: gỡ release vẫn giữ Secret, cài lại dùng đúng credential cũ.
+
+Tự quản lý Secret (kubectl, Sealed Secrets, External Secrets...): đặt `authSecret.create: false` và tạo Secret tên `<release>-rabbitmq-auth` với 2 key trên, hoặc trỏ `rabbitmq.auth.existingPasswordSecret` / `existingErlangSecret` sang tên khác.

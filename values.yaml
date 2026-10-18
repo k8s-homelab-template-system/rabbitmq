@@ -15,10 +15,11 @@ rabbitmq:
 
   auth:
     username: app
-    # Để trống thì chart tự sinh mật khẩu và Erlang cookie, lưu vào Secret.
-    # Nên trỏ tới Secret có sẵn để không bị đổi khi upgrade:
-    # existingPasswordSecret: rabbitmq-auth
-    # existingErlangSecret: rabbitmq-auth
+    # Mật khẩu và Erlang cookie nằm trong Secret <release>-rabbitmq-auth (xem authSecret ở cuối file).
+    existingPasswordSecret: '{{ .Release.Name }}-rabbitmq-auth'
+    existingSecretPasswordKey: rabbitmq-password
+    existingErlangSecret: '{{ .Release.Name }}-rabbitmq-auth'
+    existingSecretErlangKey: rabbitmq-erlang-cookie
 
   persistence:
     enabled: true
@@ -55,3 +56,9 @@ rabbitmq:
 
   metrics:
     enabled: false
+
+# Secret credential do chart này tạo (templates/auth-secret.yaml), tên lấy từ
+# rabbitmq.auth.existingPasswordSecret. Key: rabbitmq-password, rabbitmq-erlang-cookie.
+# create: false nếu tự quản lý Secret đó (tạo bằng kubectl, Sealed Secrets, External Secrets...).
+authSecret:
+  create: true
