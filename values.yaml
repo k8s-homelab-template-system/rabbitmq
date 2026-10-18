@@ -20,6 +20,10 @@ rabbitmq:
     existingSecretPasswordKey: rabbitmq-password
     existingErlangSecret: '{{ .Release.Name }}-rabbitmq-auth'
     existingSecretErlangKey: rabbitmq-erlang-cookie
+    # Không ghi mật khẩu vào đây: giá trị được đọc từ Secret đang có trong cluster lúc deploy.
+    # Chart bitnami bắt buộc biết mật khẩu hiện tại khi upgrade (PASSWORDS ERROR) nếu Secret
+    # existingPasswordSecret chưa tồn tại.
+    password: '{{ include "homelab.rabbitmq.storedCredential" (dict "secret" (tpl .Values.auth.existingPasswordSecret .) "legacySecret" (printf "%s-rabbitmq" .Release.Name) "key" "rabbitmq-password" "context" .) }}'
 
   persistence:
     enabled: true
