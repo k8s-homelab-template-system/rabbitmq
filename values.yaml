@@ -43,7 +43,7 @@ rabbitmq:
   # Mở management UI ra ngoài cluster qua Ingress (trỏ tới port 15672).
   ingress:
     enabled: false
-    hostname: rabbitmq.homelab.local
+    hostname: rabbitmq-mgm.example.com
     path: /
     pathType: ImplementationSpecific
     # Để trống = dùng IngressClass mặc định của cluster (k3s: traefik).

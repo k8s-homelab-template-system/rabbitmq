@@ -49,7 +49,7 @@ Hoặc bật Ingress (trỏ tới port 15672):
 rabbitmq:
   ingress:
     enabled: true
-    hostname: rabbitmq.homelab.local
+    hostname: rabbitmq-mgm.example.com
 ```
 
 Mật khẩu được sinh ngẫu nhiên khi cài lần đầu. Để tránh bị đổi khi upgrade, hãy tạo Secret trước rồi trỏ tới nó bằng `rabbitmq.auth.existingPasswordSecret` và `rabbitmq.auth.existingErlangSecret`.
