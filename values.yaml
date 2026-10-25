@@ -11,7 +11,38 @@ rabbitmq:
       # Chart Bitnami chặn image ngoài repo bitnami/* nếu không bật cờ này.
       allowInsecureImages: true
 
-  replicaCount: 1
+  # HA: 3 node gom cluster qua rabbitmq_peer_discovery_k8s. Quorum queue cần đa số node
+  # (2/3) còn sống, nên 3 là số node tối thiểu chịu được mất 1 node. Đặt 1 để chạy single node.
+  replicaCount: 3
+
+  # Parallel: các pod khởi động cùng lúc. Với OrderedReady, nếu node tắt sau cùng không phải
+  # pod-0 thì pod-0 chờ peer mãi, pod-1/2 không được tạo -> cluster kẹt khi restart.
+  # Trường này immutable trên StatefulSet: đổi trên release đang chạy phải xoá StatefulSet
+  # trước (xem README, mục HA).
+  podManagementPolicy: Parallel
+
+  clustering:
+    enabled: true
+    # pause_minority: bên thiểu số tự dừng khi mạng bị chia, tránh 2 bên cùng nhận ghi.
+    # Hợp với cluster số node lẻ; quorum queue tự xử lý partition theo Raft.
+    partitionHandling: pause_minority
+    forceBoot: false
+
+  # Rải pod ra các node Kubernetes khác nhau. soft = vẫn schedule được khi cluster ít node hơn
+  # replicaCount (khi đó mất 1 node k8s có thể mất đa số RabbitMQ). hard nếu có >= 3 node.
+  podAntiAffinityPreset: soft
+
+  # Drain/upgrade node chỉ được làm mất 1 pod RabbitMQ mỗi lần, giữ đa số cho quorum queue.
+  pdb:
+    create: true
+    maxUnavailable: 1
+
+  # Queue khai báo không có x-queue-type sẽ là quorum queue (replicate qua các node).
+  # Classic queue không replicate (mirroring đã bị bỏ từ RabbitMQ 4.0).
+  # Chỉ áp dụng cho vhost tạo mới; vhost "/" đã có từ trước phải chỉnh tay (xem README, mục HA).
+  extraConfiguration: |-
+    default_queue_type = quorum
+    cluster_formation.target_cluster_size_hint = {{ .Values.replicaCount }}
 
   auth:
     username: app
